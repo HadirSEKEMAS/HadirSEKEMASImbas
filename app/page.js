@@ -27,18 +27,18 @@ export default function AttendancePage() {
   const [classCounts, setClassCounts] = useState({});
   const [showSummary, setShowSummary] = useState(false);
   const [currentTime, setCurrentTime] = useState("");
+  const [cooldownActive, setCooldownActive] = useState(false); // New Cooldown state
   const scannerRef = useRef(null);
 
   // Live Clock Logic
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
-      setCurrentTime(now.toLocaleTimeString('en-GB')); // 24-hour format
+      setCurrentTime(now.toLocaleTimeString('en-GB'));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Calculate grand total from the class breakdown
   const totalToday = Object.values(classCounts).reduce((a, b) => a + b, 0);
 
   useEffect(() => {
@@ -62,6 +62,10 @@ export default function AttendancePage() {
   };
 
   const processAttendance = async (barcodeText) => {
+    // Prevent multiple processes during cooldown
+    if (cooldownActive) return false;
+    
+    setCooldownActive(true); // Start cooldown immediately
     setBgColor('#e0f7fa'); 
     setStatusMsg("Memproses...");
 
@@ -75,7 +79,7 @@ export default function AttendancePage() {
       if (fetchError || !student) {
         setBgColor('#fff176'); 
         setStatusMsg("❌ Tidak dijumpai!");
-        handlePostProcess(800);
+        handlePostProcess(1000); // 1s cooldown
         return false;
       }
 
@@ -96,7 +100,7 @@ export default function AttendancePage() {
       if (insertError) {
         setBgColor('#ffccbc');
         setStatusMsg(insertError.code === '23505' ? `⚠️ ${student.name} (Sudah Record)` : `Ralat: ${insertError.message}`);
-        handlePostProcess(800);
+        handlePostProcess(1000); // 1s cooldown
         return false;
       } else {
         playSuccessBeep();
@@ -118,7 +122,7 @@ export default function AttendancePage() {
           photo: student.photo_url
         }, ...prev].slice(0, 10));
         
-        handlePostProcess(600);
+        handlePostProcess(1000); // 1s cooldown
         return true;
       }
     } catch (err) {
@@ -134,6 +138,7 @@ export default function AttendancePage() {
       setManualId(''); 
       setBgColor('#ffffff');
       setStatusMsg(isManual ? "Sedia" : "Sedia untuk Imbas");
+      setCooldownActive(false); // End cooldown
       if (scannerRef.current && !isManual) {
         try { scannerRef.current.resume(); } catch (e) {}
       }
@@ -144,17 +149,20 @@ export default function AttendancePage() {
     if (!isManual) {
       const scanner = new Html5QrcodeScanner('reader', {
         fps: 30, 
-        qrbox: { width: 320, height: 180 }, // Optimized for 1D traditional barcodes
+        qrbox: { width: 320, height: 180 },
         aspectRatio: 1.0,
       });
       scannerRef.current = scanner;
       scanner.render(async (text) => {
-        scanner.pause(true);
-        await processAttendance(text);
+        // Only trigger if not in cooldown
+        if (!cooldownActive) {
+           scanner.pause(true);
+           await processAttendance(text);
+        }
       }, (err) => {});
       return () => { if (scannerRef.current) scannerRef.current.clear().catch(e => {}); };
     }
-  }, [isManual]);
+  }, [isManual, cooldownActive]); // Dependency on cooldownActive to prevent scanner overlaps
 
   const handleManualSubmit = async (e) => {
     e.preventDefault();
@@ -262,7 +270,9 @@ export default function AttendancePage() {
               autoFocus
             />
           </div>
-          <button type="submit" style={{ width: '100%', padding: '14px', backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>Hantar</button>
+          <button type="submit" disabled={cooldownActive} style={{ width: '100%', padding: '14px', backgroundColor: cooldownActive ? '#ccc' : '#2196F3', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>
+            {cooldownActive ? "Tunggu..." : "Hantar"}
+          </button>
         </form>
       )}
       
