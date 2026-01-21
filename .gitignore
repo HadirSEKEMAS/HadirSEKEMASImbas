@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+build/
+
+# Environment variables (CRITICAL: Do not upload your Supabase keys)
+.env
+.env.local
+.env.production
+
+# OS files
+.DS_Store
+Thumbs.db

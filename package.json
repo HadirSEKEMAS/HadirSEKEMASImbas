@@ -1,0 +1,17 @@
+{
+  "name": "hadir-sekemas-imbas",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.91.0",
+    "html5-qrcode": "^2.3.8",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  }
+}
