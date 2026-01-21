@@ -29,7 +29,7 @@ export default function AttendancePage() {
   const [currentTime, setCurrentTime] = useState("");
   
   const scannerRef = useRef(null);
-  const isProcessingRef = useRef(false);
+  const isLockedRef = useRef(false); // Global lock for SUCCESS cooldown only
 
   // Live Clock Logic
   useEffect(() => {
@@ -63,12 +63,7 @@ export default function AttendancePage() {
   };
 
   const processAttendance = async (barcodeText) => {
-    if (isProcessingRef.current) return false;
-    
-    isProcessingRef.current = true; 
-    setBgColor('#e0f7fa'); 
-    setStatusMsg("Memproses...");
-
+    // Only lock here if we want to stop the world (Success or Manual)
     try {
       const { data: student, error: fetchError } = await supabase
         .from('students')
@@ -76,12 +71,24 @@ export default function AttendancePage() {
         .eq('barcode', barcodeText)
         .single();
 
+      // IF NOT FOUND: Just show a warning and let the camera keep rolling
       if (fetchError || !student) {
-        setBgColor('#fff176'); 
-        setStatusMsg("❌ Tidak dijumpai!");
-        handlePostProcess(2000); // 2 second cooldown
+        setBgColor('#fff9c4'); // Subtle yellow (warning)
+        setStatusMsg("❌ Tidak dijumpai. Mantapkan posisi kad...");
+        
+        // Short reset of the message without stopping the scanner
+        setTimeout(() => {
+            if (!isLockedRef.current) {
+                setBgColor('#ffffff');
+                setStatusMsg("Sedia untuk Imbas");
+            }
+        }, 1500);
         return false;
       }
+
+      // IF FOUND: Now we trigger the Success Cooldown
+      isLockedRef.current = true;
+      scannerRef.current?.pause(true); 
 
       const now = new Date();
       const localDate = now.toLocaleDateString('en-CA'); 
@@ -100,13 +107,13 @@ export default function AttendancePage() {
       if (insertError) {
         setBgColor('#ffccbc');
         setStatusMsg(insertError.code === '23505' ? `⚠️ ${student.name} (Sudah Record)` : `Ralat: ${insertError.message}`);
-        handlePostProcess(2000); // 2 second cooldown
+        handleSuccessReset(2000);
         return false;
       } else {
         playSuccessBeep();
         if (navigator.vibrate) navigator.vibrate(100); 
         
-        setBgColor('#81c784'); 
+        setBgColor('#81c784'); // Success Green
         setStatusMsg(`✅ ${student.name}`);
         
         setClassCounts(prev => ({
@@ -122,23 +129,21 @@ export default function AttendancePage() {
           photo: student.photo_url
         }, ...prev].slice(0, 10));
         
-        handlePostProcess(2000); // 2 second cooldown
+        handleSuccessReset(2000); // 2 second pause only for success
         return true;
       }
     } catch (err) {
-      setBgColor('#ef9a9a');
-      setStatusMsg("Ralat Sistem.");
-      handlePostProcess(2000);
+      console.error(err);
+      isLockedRef.current = false;
       return false;
     }
   };
 
-  const handlePostProcess = (delay) => {
+  const handleSuccessReset = (delay) => {
     setTimeout(() => {
-      setManualId(''); 
       setBgColor('#ffffff');
-      setStatusMsg(isManual ? "Sedia" : "Sedia untuk Imbas");
-      isProcessingRef.current = false; 
+      setStatusMsg("Sedia untuk Imbas");
+      isLockedRef.current = false; 
       if (scannerRef.current && !isManual) {
         try { scannerRef.current.resume(); } catch (e) {}
       }
@@ -148,31 +153,21 @@ export default function AttendancePage() {
   useEffect(() => {
     if (!isManual) {
       const scanner = new Html5QrcodeScanner('reader', {
-        fps: 15, 
+        fps: 20, 
         qrbox: { width: 300, height: 150 }, 
         aspectRatio: 1.0,
-        rememberLastRotation: true, 
       });
       scannerRef.current = scanner;
 
       scanner.render(async (text) => {
-        if (!isProcessingRef.current) {
-          isProcessingRef.current = true; 
-          setStatusMsg("Sila pegang kad tegak...");
-          
-          setTimeout(async () => {
-            scanner.pause(true);
-            isProcessingRef.current = false; 
-            await processAttendance(text);
-          }, 500); 
-        }
+        // If we are in the 2s SUCCESS cooldown, ignore everything
+        if (isLockedRef.current) return;
+
+        // Otherwise, process. If it fails, it won't pause the scanner.
+        await processAttendance(text);
       }, (err) => {});
 
-      return () => { 
-        if (scannerRef.current) {
-          scannerRef.current.clear().catch(e => {}); 
-        }
-      };
+      return () => { if (scannerRef.current) scannerRef.current.clear().catch(e => {}); };
     }
   }, [isManual]);
 
@@ -184,6 +179,7 @@ export default function AttendancePage() {
       return;
     }
     await processAttendance(`STU-${manualId}`);
+    setManualId('');
   };
 
   const playSuccessBeep = () => {
@@ -200,11 +196,10 @@ export default function AttendancePage() {
   return (
     <main style={{ 
       padding: '15px', textAlign: 'center', maxWidth: '500px', margin: '0 auto', 
-      fontFamily: 'sans-serif', backgroundColor: bgColor, transition: 'background-color 0.2s ease',
+      fontFamily: 'sans-serif', backgroundColor: bgColor, transition: 'background-color 0.3s ease',
       minHeight: '100vh', position: 'relative'
     }}>
       
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <img src="/school_logo.jpg" alt="Logo" style={{ width: '45px', height: 'auto' }} />
         <div style={{ textAlign: 'center' }}>
@@ -216,7 +211,6 @@ export default function AttendancePage() {
         </button>
       </div>
 
-      {/* Summary Modal */}
       {showSummary && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '15px', padding: '20px', width: '100%', maxWidth: '400px' }}>
@@ -237,7 +231,6 @@ export default function AttendancePage() {
         </div>
       )}
       
-      {/* Controls */}
       <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '15px' }}>
         <button onClick={() => { setIsManual(!isManual); setManualId(''); }} style={{ padding: '10px 20px', borderRadius: '25px', border: 'none', backgroundColor: '#2196F3', color: 'white', fontWeight: 'bold' }}>
           {isManual ? "📷 Kamera" : "⌨️ Manual ID"}
@@ -256,12 +249,10 @@ export default function AttendancePage() {
         </form>
       )}
       
-      {/* Status Bar */}
       <div style={{ margin: '15px 0', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #ddd', minHeight: '45px' }}>
         <strong style={{ fontSize: '16px' }}>{statusMsg}</strong>
       </div>
 
-      {/* History List */}
       <div style={{ textAlign: 'left', marginTop: '10px' }}>
         <h4 style={{ borderBottom: '2px solid #eee', paddingBottom: '5px', fontSize: '14px', color: '#444' }}>Senarai Terkini</h4>
         {history.map((item, index) => (
