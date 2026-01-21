@@ -37,7 +37,7 @@ export default function AttendancePage() {
     const timer = setInterval(() => {
       const now = new Date();
       setCurrentTime(now.toLocaleTimeString('en-GB'));
-    }, 3000);
+    }, 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -81,7 +81,7 @@ export default function AttendancePage() {
       if (fetchError || !student) {
         setBgColor('#fff176'); 
         setStatusMsg("❌ Tidak dijumpai!");
-        handlePostProcess(3000);
+        handlePostProcess(2000);
         return false;
       }
 
@@ -102,7 +102,7 @@ export default function AttendancePage() {
       if (insertError) {
         setBgColor('#ffccbc');
         setStatusMsg(insertError.code === '23505' ? `⚠️ ${student.name} (Sudah Record)` : `Ralat: ${insertError.message}`);
-        handlePostProcess(3000);
+        handlePostProcess(2000);
         return false;
       } else {
         playSuccessBeep();
@@ -124,13 +124,13 @@ export default function AttendancePage() {
           photo: student.photo_url
         }, ...prev].slice(0, 10));
         
-        handlePostProcess(3000);
+        handlePostProcess(2000);
         return true;
       }
     } catch (err) {
       setBgColor('#ef9a9a');
       setStatusMsg("Ralat Sistem.");
-      handlePostProcess(3000);
+      handlePostProcess(2000);
       return false;
     }
   };
