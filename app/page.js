@@ -27,8 +27,10 @@ export default function AttendancePage() {
   const [classCounts, setClassCounts] = useState({});
   const [showSummary, setShowSummary] = useState(false);
   const [currentTime, setCurrentTime] = useState("");
-  const [cooldownActive, setCooldownActive] = useState(false); // New Cooldown state
+  
+  // REFS: These keep the camera and logic stable without refreshing the page
   const scannerRef = useRef(null);
+  const isProcessingRef = useRef(false);
 
   // Live Clock Logic
   useEffect(() => {
@@ -62,10 +64,10 @@ export default function AttendancePage() {
   };
 
   const processAttendance = async (barcodeText) => {
-    // Prevent multiple processes during cooldown
-    if (cooldownActive) return false;
+    // 1. Check if we are already processing (the 1s cooldown)
+    if (isProcessingRef.current) return false;
     
-    setCooldownActive(true); // Start cooldown immediately
+    isProcessingRef.current = true; // Lock the logic immediately
     setBgColor('#e0f7fa'); 
     setStatusMsg("Memproses...");
 
@@ -79,7 +81,7 @@ export default function AttendancePage() {
       if (fetchError || !student) {
         setBgColor('#fff176'); 
         setStatusMsg("❌ Tidak dijumpai!");
-        handlePostProcess(1000); // 1s cooldown
+        handlePostProcess(1000);
         return false;
       }
 
@@ -100,7 +102,7 @@ export default function AttendancePage() {
       if (insertError) {
         setBgColor('#ffccbc');
         setStatusMsg(insertError.code === '23505' ? `⚠️ ${student.name} (Sudah Record)` : `Ralat: ${insertError.message}`);
-        handlePostProcess(1000); // 1s cooldown
+        handlePostProcess(1000);
         return false;
       } else {
         playSuccessBeep();
@@ -122,7 +124,7 @@ export default function AttendancePage() {
           photo: student.photo_url
         }, ...prev].slice(0, 10));
         
-        handlePostProcess(1000); // 1s cooldown
+        handlePostProcess(1000);
         return true;
       }
     } catch (err) {
@@ -138,7 +140,11 @@ export default function AttendancePage() {
       setManualId(''); 
       setBgColor('#ffffff');
       setStatusMsg(isManual ? "Sedia" : "Sedia untuk Imbas");
-      setCooldownActive(false); // End cooldown
+      
+      // Unlock the logic
+      isProcessingRef.current = false; 
+
+      // Resume scanning without restarting the camera
       if (scannerRef.current && !isManual) {
         try { scannerRef.current.resume(); } catch (e) {}
       }
@@ -153,16 +159,22 @@ export default function AttendancePage() {
         aspectRatio: 1.0,
       });
       scannerRef.current = scanner;
+
       scanner.render(async (text) => {
-        // Only trigger if not in cooldown
-        if (!cooldownActive) {
-           scanner.pause(true);
-           await processAttendance(text);
+        // Only trigger process if we aren't currently "Locked"
+        if (!isProcessingRef.current) {
+          scanner.pause(true); // Stop the visual frame, but keep camera ON
+          await processAttendance(text);
         }
       }, (err) => {});
-      return () => { if (scannerRef.current) scannerRef.current.clear().catch(e => {}); };
+
+      return () => { 
+        if (scannerRef.current) {
+          scannerRef.current.clear().catch(e => {}); 
+        }
+      };
     }
-  }, [isManual, cooldownActive]); // Dependency on cooldownActive to prevent scanner overlaps
+  }, [isManual]); // Removed cooldown dependency to keep camera alive
 
   const handleManualSubmit = async (e) => {
     e.preventDefault();
@@ -229,7 +241,7 @@ export default function AttendancePage() {
                 <div style={{ fontSize: '36px', color: '#2e7d32', fontWeight: '900' }}>{totalToday}</div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', textAlign: 'left', marginBottom: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', textAlign: 'left', marginBottom: '20px', maxHeight: '300px', overflowY: 'auto' }}>
               {CLASS_LIST.map(cls => (
                 <div key={cls} style={{ borderBottom: '1px solid #eee', padding: '4px', fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
                   <span>{cls}:</span>
@@ -270,9 +282,7 @@ export default function AttendancePage() {
               autoFocus
             />
           </div>
-          <button type="submit" disabled={cooldownActive} style={{ width: '100%', padding: '14px', backgroundColor: cooldownActive ? '#ccc' : '#2196F3', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>
-            {cooldownActive ? "Tunggu..." : "Hantar"}
-          </button>
+          <button type="submit" style={{ width: '100%', padding: '14px', backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>Hantar</button>
         </form>
       )}
       
