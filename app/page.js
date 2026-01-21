@@ -28,7 +28,6 @@ export default function AttendancePage() {
   const [showSummary, setShowSummary] = useState(false);
   const [currentTime, setCurrentTime] = useState("");
   
-  // REFS: These keep the camera and logic stable without refreshing the page
   const scannerRef = useRef(null);
   const isProcessingRef = useRef(false);
 
@@ -64,10 +63,9 @@ export default function AttendancePage() {
   };
 
   const processAttendance = async (barcodeText) => {
-    // 1. Check if we are already processing (the 1s cooldown)
     if (isProcessingRef.current) return false;
     
-    isProcessingRef.current = true; // Lock the logic immediately
+    isProcessingRef.current = true; 
     setBgColor('#e0f7fa'); 
     setStatusMsg("Memproses...");
 
@@ -81,7 +79,7 @@ export default function AttendancePage() {
       if (fetchError || !student) {
         setBgColor('#fff176'); 
         setStatusMsg("❌ Tidak dijumpai!");
-        handlePostProcess(2000);
+        handlePostProcess(2000); // 2 second cooldown
         return false;
       }
 
@@ -102,7 +100,7 @@ export default function AttendancePage() {
       if (insertError) {
         setBgColor('#ffccbc');
         setStatusMsg(insertError.code === '23505' ? `⚠️ ${student.name} (Sudah Record)` : `Ralat: ${insertError.message}`);
-        handlePostProcess(2000);
+        handlePostProcess(2000); // 2 second cooldown
         return false;
       } else {
         playSuccessBeep();
@@ -124,7 +122,7 @@ export default function AttendancePage() {
           photo: student.photo_url
         }, ...prev].slice(0, 10));
         
-        handlePostProcess(2000);
+        handlePostProcess(2000); // 2 second cooldown
         return true;
       }
     } catch (err) {
@@ -140,11 +138,7 @@ export default function AttendancePage() {
       setManualId(''); 
       setBgColor('#ffffff');
       setStatusMsg(isManual ? "Sedia" : "Sedia untuk Imbas");
-      
-      // Unlock the logic
       isProcessingRef.current = false; 
-
-      // Resume scanning without restarting the camera
       if (scannerRef.current && !isManual) {
         try { scannerRef.current.resume(); } catch (e) {}
       }
@@ -154,17 +148,23 @@ export default function AttendancePage() {
   useEffect(() => {
     if (!isManual) {
       const scanner = new Html5QrcodeScanner('reader', {
-        fps: 30, 
-        qrbox: { width: 320, height: 180 },
+        fps: 15, 
+        qrbox: { width: 300, height: 150 }, 
         aspectRatio: 1.0,
+        rememberLastRotation: true, 
       });
       scannerRef.current = scanner;
 
       scanner.render(async (text) => {
-        // Only trigger process if we aren't currently "Locked"
         if (!isProcessingRef.current) {
-          scanner.pause(true); // Stop the visual frame, but keep camera ON
-          await processAttendance(text);
+          isProcessingRef.current = true; 
+          setStatusMsg("Sila pegang kad tegak...");
+          
+          setTimeout(async () => {
+            scanner.pause(true);
+            isProcessingRef.current = false; 
+            await processAttendance(text);
+          }, 500); 
         }
       }, (err) => {});
 
@@ -174,7 +174,7 @@ export default function AttendancePage() {
         }
       };
     }
-  }, [isManual]); // Removed cooldown dependency to keep camera alive
+  }, [isManual]);
 
   const handleManualSubmit = async (e) => {
     e.preventDefault();
@@ -199,48 +199,31 @@ export default function AttendancePage() {
 
   return (
     <main style={{ 
-      padding: '15px', 
-      textAlign: 'center', 
-      maxWidth: '500px', 
-      margin: '0 auto', 
-      fontFamily: 'sans-serif',
-      backgroundColor: bgColor,
-      transition: 'background-color 0.2s ease',
-      minHeight: '100vh',
-      position: 'relative'
+      padding: '15px', textAlign: 'center', maxWidth: '500px', margin: '0 auto', 
+      fontFamily: 'sans-serif', backgroundColor: bgColor, transition: 'background-color 0.2s ease',
+      minHeight: '100vh', position: 'relative'
     }}>
       
-      {/* HEADER SECTION */}
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <img src="/school_logo.jpg" alt="Logo" style={{ width: '45px', height: 'auto' }} />
-        
         <div style={{ textAlign: 'center' }}>
             <h1 style={{ color: '#2e7d32', margin: '0', fontSize: '18px' }}>Hadir SEKEMAS</h1>
             <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#333', marginTop: '2px' }}>{currentTime}</div>
         </div>
-
-        <button 
-          onClick={() => setShowSummary(true)}
-          style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #2e7d32', backgroundColor: 'white', color: '#2e7d32', fontWeight: 'bold', fontSize: '12px' }}
-        >
+        <button onClick={() => setShowSummary(true)} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #2e7d32', backgroundColor: 'white', color: '#2e7d32', fontWeight: 'bold', fontSize: '12px' }}>
           📊 Ringkasan
         </button>
       </div>
 
-      {/* OVERLAY SUMMARY MODAL */}
+      {/* Summary Modal */}
       {showSummary && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
-        }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '15px', padding: '20px', width: '100%', maxWidth: '400px' }}>
-            
             <div style={{ backgroundColor: '#f0fdf4', padding: '15px', borderRadius: '10px', marginBottom: '15px', border: '1px solid #bcf0da' }}>
                 <div style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>JUMLAH KESELURUHAN</div>
                 <div style={{ fontSize: '36px', color: '#2e7d32', fontWeight: '900' }}>{totalToday}</div>
             </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', textAlign: 'left', marginBottom: '20px', maxHeight: '300px', overflowY: 'auto' }}>
               {CLASS_LIST.map(cls => (
                 <div key={cls} style={{ borderBottom: '1px solid #eee', padding: '4px', fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
@@ -249,22 +232,14 @@ export default function AttendancePage() {
                 </div>
               ))}
             </div>
-            
-            <button 
-              onClick={() => setShowSummary(false)}
-              style={{ width: '100%', padding: '14px', backgroundColor: '#2e7d32', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
-            >
-              TUTUP
-            </button>
+            <button onClick={() => setShowSummary(false)} style={{ width: '100%', padding: '14px', backgroundColor: '#2e7d32', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>TUTUP</button>
           </div>
         </div>
       )}
       
+      {/* Controls */}
       <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '15px' }}>
-        <button 
-          onClick={() => { setIsManual(!isManual); setManualId(''); }}
-          style={{ padding: '10px 20px', borderRadius: '25px', border: 'none', backgroundColor: '#2196F3', color: 'white', fontWeight: 'bold' }}
-        >
+        <button onClick={() => { setIsManual(!isManual); setManualId(''); }} style={{ padding: '10px 20px', borderRadius: '25px', border: 'none', backgroundColor: '#2196F3', color: 'white', fontWeight: 'bold' }}>
           {isManual ? "📷 Kamera" : "⌨️ Manual ID"}
         </button>
       </div>
@@ -275,21 +250,18 @@ export default function AttendancePage() {
         <form onSubmit={handleManualSubmit} style={{ padding: '20px', border: '2px dashed #2196F3', borderRadius: '15px', backgroundColor: 'white' }}>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '15px' }}>
             <span style={{ backgroundColor: '#ddd', padding: '12px', fontSize: '20px', fontWeight: 'bold', border: '1px solid #ccc', borderRadius: '8px 0 0 8px' }}>STU-</span>
-            <input 
-              type="number" inputMode="numeric" placeholder="0000" value={manualId}
-              onChange={(e) => { if (e.target.value.length <= 4) setManualId(e.target.value); }}
-              style={{ width: '100px', padding: '12px', fontSize: '20px', border: '1px solid #ccc', borderLeft: 'none', borderRadius: '0 8px 8px 0', textAlign: 'center' }}
-              autoFocus
-            />
+            <input type="number" inputMode="numeric" placeholder="0000" value={manualId} onChange={(e) => { if (e.target.value.length <= 4) setManualId(e.target.value); }} style={{ width: '100px', padding: '12px', fontSize: '20px', border: '1px solid #ccc', borderLeft: 'none', borderRadius: '0 8px 8px 0', textAlign: 'center' }} autoFocus />
           </div>
           <button type="submit" style={{ width: '100%', padding: '14px', backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>Hantar</button>
         </form>
       )}
       
+      {/* Status Bar */}
       <div style={{ margin: '15px 0', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #ddd', minHeight: '45px' }}>
         <strong style={{ fontSize: '16px' }}>{statusMsg}</strong>
       </div>
 
+      {/* History List */}
       <div style={{ textAlign: 'left', marginTop: '10px' }}>
         <h4 style={{ borderBottom: '2px solid #eee', paddingBottom: '5px', fontSize: '14px', color: '#444' }}>Senarai Terkini</h4>
         {history.map((item, index) => (
