@@ -227,7 +227,7 @@ export default function AttendancePage() {
         <h4 style={{ fontSize: '12px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '16px', paddingLeft: '8px' }}>Kehadiran Terkini</h4>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {history.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#cbd5e1', fontSize: '14px' }}>No records yet today</div>
+            <div style={{ textAlign: 'center', padding: '40px', color: '#cbd5e1', fontSize: '14px' }}>Tiada rekod kehadiran buat masa ini</div>
           )}
           {history.map((item, index) => (
             <div key={index} style={{ 
