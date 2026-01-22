@@ -172,7 +172,8 @@ export default function AttendancePage() {
   return (
     <main style={{ 
       padding: '24px 16px', textAlign: 'center', maxWidth: '480px', margin: '0 auto', 
-      backgroundColor: bgColor, transition: 'background-color 0.4s ease', minHeight: '100vh'
+      backgroundColor: bgColor, transition: 'background-color 0.4s ease', minHeight: '100vh',
+      paddingBottom: '80px' // Ruang untuk butang dashboard di bawah
     }}>
       
       {/* HEADER */}
@@ -239,7 +240,7 @@ export default function AttendancePage() {
       </div>
 
       {/* SEJARAH TERKINI */}
-      <div style={{ textAlign: 'left' }}>
+      <div style={{ textAlign: 'left', marginBottom: '20px' }}>
         <h4 style={{ fontSize: '12px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '16px', paddingLeft: '8px' }}>Rekod Imbasan Anda</h4>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {history.length === 0 && (
@@ -261,6 +262,22 @@ export default function AttendancePage() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* BUTANG DASHBOARD MURID (NAVIGASI) */}
+      <div style={{ position: 'fixed', bottom: '15px', left: '0', right: '0', padding: '0 16px', zIndex: 100 }}>
+        <a 
+          href="https://hadirsekemas.github.io/pelajar/" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          style={{ 
+            display: 'block', width: '100%', padding: '16px', backgroundColor: '#1e293b', 
+            color: 'white', textDecoration: 'none', borderRadius: '16px', fontWeight: '800', 
+            fontSize: '14px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.3)', textAlign: 'center'
+          }}
+        >
+          🌐 HadirSEKEMAS Murid
+        </a>
       </div>
 
       <style jsx global>{`
