@@ -28,6 +28,7 @@ export default function AttendancePage() {
   const scannerRef = useRef(null);
   const isLockedRef = useRef(false);
 
+  // 1. Live Clock
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
@@ -38,7 +39,31 @@ export default function AttendancePage() {
 
   const totalToday = Object.values(classCounts).reduce((a, b) => a + b, 0);
 
-  useEffect(() => { fetchClassSummaries(); }, []);
+  // 2. Initial Fetch + Realtime Listener
+  useEffect(() => {
+    fetchClassSummaries();
+
+    // Subscribe to real-time updates from Supabase
+    const channel = supabase
+      .channel('realtime_attendance')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'students_attendance' },
+        (payload) => {
+          // This code runs on ALL devices when a new record is added to the database
+          const newClassName = payload.new.class_name;
+          setClassCounts((prev) => ({
+            ...prev,
+            [newClassName]: (prev[newClassName] || 0) + 1
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const fetchClassSummaries = async () => {
     const today = new Date().toLocaleDateString('en-CA');
@@ -88,11 +113,13 @@ export default function AttendancePage() {
         if (navigator.vibrate) navigator.vibrate(100); 
         setBgColor('#dcfce7'); 
         setStatusMsg(`✅ Berjaya: ${student.name}`);
-        setClassCounts(prev => ({ ...prev, [student.class_name_full]: (prev[student.class_name_full] || 0) + 1 }));
+        
+        // Update history locally (Realtime updates only the counts)
         setHistory(prev => [{ 
           name: student.name, barcode: student.barcode, className: student.class_name_full,
           time: localTime, photo: student.photo_url
         }, ...prev].slice(0, 10));
+        
         handleSuccessReset(2000);
         return true;
       }
@@ -150,20 +177,14 @@ export default function AttendancePage() {
       backgroundColor: bgColor, transition: 'background-color 0.4s ease', minHeight: '100vh'
     }}>
       
-      {/* HEADER CARD */}
-      <header style={{ 
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-        marginBottom: '24px', padding: '16px', backgroundColor: 'white', 
-        borderRadius: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' 
-      }}>
-        <img src="/school_logo.png" alt="Logo" style={{ width: '48px', height: '48px', borderRadius: '12px', objectFit: 'contain' }} />
+      {/* HEADER */}
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', padding: '16px', backgroundColor: 'white', borderRadius: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+        <img src="/school_logo.jpg" alt="Logo" style={{ width: '48px', height: '48px', borderRadius: '12px', objectFit: 'contain' }} />
         <div style={{ flex: 1, textAlign: 'center' }}>
-            <h1 style={{ color: '#166534', margin: '0', fontSize: '16px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Hadir SEKEMAS Imbas Pelajar</h1>
+            <h1 style={{ color: '#166534', margin: '0', fontSize: '14px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Hadir SEKEMAS</h1>
             <div style={{ fontSize: '22px', fontWeight: '700', color: '#334155' }}>{currentTime}</div>
         </div>
-        <button onClick={() => setShowSummary(true)} style={{ padding: '12px', borderRadius: '14px', border: 'none', backgroundColor: '#f1f5f9', cursor: 'pointer', fontSize: '18px' }}>
-          📊
-        </button>
+        <button onClick={() => setShowSummary(true)} style={{ padding: '12px', borderRadius: '14px', border: 'none', backgroundColor: '#f1f5f9', cursor: 'pointer', fontSize: '18px' }}>📊</button>
       </header>
 
       {/* SUMMARY MODAL */}
@@ -171,7 +192,7 @@ export default function AttendancePage() {
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)', padding: '20px' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '28px', padding: '24px', width: '100%', maxWidth: '400px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
             <div style={{ backgroundColor: '#f0fdf4', padding: '24px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #dcfce7' }}>
-                <div style={{ fontSize: '11px', color: '#166534', fontWeight: '800', letterSpacing: '1px', marginBottom: '4px' }}>JUMLAH KEHADIRAN</div>
+                <div style={{ fontSize: '11px', color: '#166534', fontWeight: '800', letterSpacing: '1px', marginBottom: '4px' }}>JUMLAH KEHADIRAN LIVE</div>
                 <div style={{ fontSize: '56px', color: '#14532d', fontWeight: '900', lineHeight: '1' }}>{totalToday}</div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', textAlign: 'left', marginBottom: '24px', maxHeight: '320px', overflowY: 'auto' }}>
@@ -182,21 +203,21 @@ export default function AttendancePage() {
                 </div>
               ))}
             </div>
-            <button onClick={() => setShowSummary(false)} style={{ width: '100%', padding: '18px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '800', fontSize: '16px', cursor: 'pointer', transition: '0.2s' }}>Tutup Kehadiran</button>
+            <button onClick={() => setShowSummary(false)} style={{ width: '100%', padding: '18px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '800', fontSize: '16px', cursor: 'pointer' }}>Tutup</button>
           </div>
         </div>
       )}
       
-      {/* MODE SELECTOR */}
+      {/* SCANNER TOGGLE */}
       <div style={{ display: 'inline-flex', background: '#e2e8f0', padding: '4px', borderRadius: '16px', marginBottom: '24px' }}>
-        <button onClick={() => setIsManual(false)} style={{ padding: '10px 24px', borderRadius: '12px', border: 'none', backgroundColor: !isManual ? 'white' : 'transparent', color: !isManual ? '#1e293b' : '#64748b', fontWeight: '700', fontSize: '14px', boxShadow: !isManual ? '0 4px 6px -1px rgba(0,0,0,0.1)' : 'none', transition: '0.3s' }}>📷 Pengimbas</button>
-        <button onClick={() => { setIsManual(true); setManualId(''); }} style={{ padding: '10px 24px', borderRadius: '12px', border: 'none', backgroundColor: isManual ? 'white' : 'transparent', color: isManual ? '#1e293b' : '#64748b', fontWeight: '700', fontSize: '14px', boxShadow: isManual ? '0 4px 6px -1px rgba(0,0,0,0.1)' : 'none', transition: '0.3s' }}>⌨️ Manual</button>
+        <button onClick={() => setIsManual(false)} style={{ padding: '10px 24px', borderRadius: '12px', border: 'none', backgroundColor: !isManual ? 'white' : 'transparent', color: !isManual ? '#1e293b' : '#64748b', fontWeight: '700', transition: '0.3s' }}>📷 Scanner</button>
+        <button onClick={() => { setIsManual(true); setManualId(''); }} style={{ padding: '10px 24px', borderRadius: '12px', border: 'none', backgroundColor: isManual ? 'white' : 'transparent', color: isManual ? '#1e293b' : '#64748b', fontWeight: '700', transition: '0.3s' }}>⌨️ Manual</button>
       </div>
 
-      {/* SCAN / INPUT AREA */}
+      {/* INPUT AREA */}
       <div style={{ marginBottom: '24px' }}>
         {!isManual ? (
-          <div id="reader" style={{ borderRadius: '24px', overflow: 'hidden', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', backgroundColor: 'white' }}></div>
+          <div id="reader" style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', backgroundColor: 'white' }}></div>
         ) : (
           <form onSubmit={handleManualSubmit} style={{ padding: '32px 24px', borderRadius: '24px', backgroundColor: 'white', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
@@ -205,30 +226,24 @@ export default function AttendancePage() {
                 <input 
                   type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0000" value={manualId} 
                   onChange={(e) => { const val = e.target.value; if (/^\d*$/.test(val) && val.length <= 4) setManualId(val); }} 
-                  style={{ width: '100px', padding: '16px 8px', fontSize: '28px', border: 'none', background: 'transparent', textAlign: 'center', fontWeight: '800', outline: 'none', color: '#1e293b' }} autoFocus 
+                  style={{ width: '100px', padding: '16px 8px', fontSize: '28px', border: 'none', background: 'transparent', textAlign: 'center', fontWeight: '800', outline: 'none' }} autoFocus 
                 />
               </div>
             </div>
-            <button type="submit" style={{ width: '100%', padding: '18px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '800', fontSize: '16px', boxShadow: '0 10px 15px -3px rgba(37, 99, 235, 0.3)' }}>Hantar Kehadiran</button>
+            <button type="submit" style={{ width: '100%', padding: '18px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '800' }}>Sahkan Murid</button>
           </form>
         )}
       </div>
       
-      {/* STATUS BANNER */}
-      <div style={{ 
-        padding: '16px', borderRadius: '16px', backgroundColor: 'white', 
-        border: '1px solid #e2e8f0', marginBottom: '32px'
-      }}>
+      {/* STATUS */}
+      <div style={{ padding: '16px', borderRadius: '16px', backgroundColor: 'white', border: '1px solid #e2e8f0', marginBottom: '32px' }}>
         <span style={{ fontSize: '14px', fontWeight: '700', color: '#475569' }}>{statusMsg}</span>
       </div>
 
-      {/* RECENT RECORDS */}
+      {/* HISTORY */}
       <div style={{ textAlign: 'left' }}>
-        <h4 style={{ fontSize: '12px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '16px', paddingLeft: '8px' }}>Kehadiran Terkini</h4>
+        <h4 style={{ fontSize: '12px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '16px', paddingLeft: '8px' }}>Rekod Anda Terkini</h4>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {history.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#cbd5e1', fontSize: '14px' }}>Tiada rekod kehadiran buat masa ini</div>
-          )}
           {history.map((item, index) => (
             <div key={index} style={{ 
               display: 'flex', alignItems: 'center', padding: '12px', borderRadius: '18px', 
@@ -236,12 +251,12 @@ export default function AttendancePage() {
               boxShadow: index === 0 ? '0 10px 15px -3px rgba(0,0,0,0.05)' : 'none',
               animation: index === 0 ? 'popIn 0.4s ease-out' : 'none'
             }}>
-              <img src={item.photo} alt="" style={{ width: '52px', height: '52px', borderRadius: '12px', marginRight: '16px', objectFit: 'cover', background: '#f1f5f9' }} />
+              <img src={item.photo} alt="" style={{ width: '52px', height: '52px', borderRadius: '12px', marginRight: '16px', objectFit: 'cover' }} />
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: '700', fontSize: '14px', color: '#1e293b', marginBottom: '2px' }}>{item.name}</div>
-                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>{item.barcode} • <span style={{ color: '#2563eb', fontWeight: '700' }}>{item.className}</span></div>
+                <div style={{ fontWeight: '700', fontSize: '14px', color: '#1e293b' }}>{item.name}</div>
+                <div style={{ fontSize: '12px', color: '#64748b' }}>{item.barcode} • <span style={{ color: '#2563eb', fontWeight: '700' }}>{item.className}</span></div>
               </div>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', backgroundColor: '#f8fafc', padding: '4px 8px', borderRadius: '6px' }}>{item.time}</div>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8' }}>{item.time}</div>
             </div>
           ))}
         </div>
@@ -249,11 +264,9 @@ export default function AttendancePage() {
 
       <style jsx global>{`
         @keyframes popIn {
-          0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+          0% { opacity: 0; transform: scale(0.9) translateY(10px); }
           100% { opacity: 1; transform: scale(1) translateY(0); }
         }
-        #reader { border: none !important; }
-        #reader__scan_region { background: white !important; }
         #reader__dashboard_section_csr button {
           background-color: #2563eb !important;
           color: white !important;
@@ -261,8 +274,6 @@ export default function AttendancePage() {
           padding: 10px 20px !important;
           border-radius: 12px !important;
           font-weight: 700 !important;
-          font-size: 14px !important;
-          text-transform: uppercase !important;
           cursor: pointer !important;
         }
         #reader video { border-radius: 24px !important; }
