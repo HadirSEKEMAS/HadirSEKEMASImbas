@@ -180,7 +180,7 @@ export default function AttendancePage() {
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', padding: '16px', backgroundColor: 'white', borderRadius: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
         <img src="/school_logo.png" alt="Logo Sekolah" style={{ width: '48px', height: '48px', borderRadius: '12px', objectFit: 'contain' }} />
         <div style={{ flex: 1, textAlign: 'center' }}>
-            <h1 style={{ color: '#166534', margin: '0', fontSize: '14px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Hadir SEKEMAS</h1>
+            <h1 style={{ color: '#166534', margin: '0', fontSize: '14px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>HadirSEKEMAS Imbas Murid</h1>
             <div style={{ fontSize: '22px', fontWeight: '700', color: '#334155' }}>{currentTime}</div>
         </div>
         <button onClick={() => setShowSummary(true)} style={{ padding: '12px', borderRadius: '14px', border: 'none', backgroundColor: '#f1f5f9', cursor: 'pointer', fontSize: '18px' }}>📊</button>
