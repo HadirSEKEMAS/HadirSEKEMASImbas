@@ -10,12 +10,9 @@ const supabase = createClient(
 );
 
 const CLASS_LIST = [
-  "1 Ibnu Majah", "1 Ibnu Sina",
-  "2 Ibnu Majah", "2 Ibnu Sina",
-  "3 Ibnu Majah", "3 Ibnu Sina",
-  "4 Ibnu Majah", "4 Ibnu Sina",
-  "5 Ibnu Majah", "5 Ibnu Sina",
-  "6 Ibnu Majah", "6 Ibnu Sina"
+  "1 Ibnu Majah", "1 Ibnu Sina", "2 Ibnu Majah", "2 Ibnu Sina",
+  "3 Ibnu Majah", "3 Ibnu Sina", "4 Ibnu Majah", "4 Ibnu Sina",
+  "5 Ibnu Majah", "5 Ibnu Sina", "6 Ibnu Majah", "6 Ibnu Sina"
 ];
 
 export default function AttendancePage() {
@@ -23,7 +20,7 @@ export default function AttendancePage() {
   const [statusMsg, setStatusMsg] = useState('Sedia untuk Imbas');
   const [manualId, setManualId] = useState('');
   const [isManual, setIsManual] = useState(false);
-  const [bgColor, setBgColor] = useState('#ffffff');
+  const [bgColor, setBgColor] = useState('#f8fafc'); 
   const [classCounts, setClassCounts] = useState({});
   const [showSummary, setShowSummary] = useState(false);
   const [currentTime, setCurrentTime] = useState("");
@@ -31,28 +28,21 @@ export default function AttendancePage() {
   const scannerRef = useRef(null);
   const isLockedRef = useRef(false);
 
-  // Live Clock Logic
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
-      setCurrentTime(now.toLocaleTimeString('en-GB'));
+      setCurrentTime(now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
 
   const totalToday = Object.values(classCounts).reduce((a, b) => a + b, 0);
 
-  useEffect(() => {
-    fetchClassSummaries();
-  }, []);
+  useEffect(() => { fetchClassSummaries(); }, []);
 
   const fetchClassSummaries = async () => {
     const today = new Date().toLocaleDateString('en-CA');
-    const { data, error } = await supabase
-      .from('students_attendance')
-      .select('class_name')
-      .eq('date', today);
-    
+    const { data, error } = await supabase.from('students_attendance').select('class_name').eq('date', today);
     if (!error && data) {
       const counts = data.reduce((acc, curr) => {
         acc[curr.class_name] = (acc[curr.class_name] || 0) + 1;
@@ -64,69 +54,45 @@ export default function AttendancePage() {
 
   const processAttendance = async (barcodeText) => {
     try {
-      const { data: student, error: fetchError } = await supabase
-        .from('students')
-        .select('*')
-        .eq('barcode', barcodeText)
-        .single();
+      const { data: student, error: fetchError } = await supabase.from('students').select('*').eq('barcode', barcodeText).single();
 
       if (fetchError || !student) {
-        setBgColor('#fff9c4'); 
-        setStatusMsg("❌ Barkod tidak dijumpai...");
-        
-        setTimeout(() => {
-            if (!isLockedRef.current) {
-                setBgColor('#ffffff');
-                setStatusMsg("Sedia untuk Imbas");
-            }
-        }, 1500);
+        setBgColor('#fef9c3'); 
+        setStatusMsg("❌ Murid tidak dijumpai");
+        setTimeout(() => { if (!isLockedRef.current) { setBgColor('#f8fafc'); setStatusMsg("Sedia untuk Imbas"); } }, 1500);
         return false;
       }
 
       isLockedRef.current = true;
-      if (scannerRef.current) {
-        try { scannerRef.current.pause(true); } catch (e) {}
-      }
+      if (scannerRef.current) { try { scannerRef.current.pause(true); } catch (e) {} }
 
       const now = new Date();
       const localDate = now.toLocaleDateString('en-CA'); 
       const localTime = now.toLocaleTimeString('en-GB', { hour12: false });
 
-      const { error: insertError } = await supabase
-        .from('students_attendance')
-        .insert([{
-          student_id: student.id,
-          class_name: student.class_name_full,
-          date: localDate,
-          status: '/',
-          timestamp: `${localDate} ${localTime}`
-        }]);
+      const { error: insertError } = await supabase.from('students_attendance').insert([{
+        student_id: student.id,
+        class_name: student.class_name_full,
+        date: localDate,
+        status: '/',
+        timestamp: `${localDate} ${localTime}`
+      }]);
 
       if (insertError) {
-        setBgColor('#ffccbc');
-        setStatusMsg(insertError.code === '23505' ? `⚠️ ${student.name} (Sudah Record)` : `Ralat: ${insertError.message}`);
+        setBgColor('#fee2e2'); 
+        setStatusMsg(insertError.code === '23505' ? `⚠️ Sudah Hadir: ${student.name}` : `Ralat: ${insertError.message}`);
         handleSuccessReset(2000);
         return false;
       } else {
         playSuccessBeep();
         if (navigator.vibrate) navigator.vibrate(100); 
-        
-        setBgColor('#81c784'); 
-        setStatusMsg(`✅ ${student.name}`);
-        
-        setClassCounts(prev => ({
-          ...prev,
-          [student.class_name_full]: (prev[student.class_name_full] || 0) + 1
-        }));
-
+        setBgColor('#dcfce7'); 
+        setStatusMsg(`✅ Berjaya: ${student.name}`);
+        setClassCounts(prev => ({ ...prev, [student.class_name_full]: (prev[student.class_name_full] || 0) + 1 }));
         setHistory(prev => [{ 
-          name: student.name, 
-          barcode: student.barcode,
-          className: student.class_name_full,
-          time: localTime, 
-          photo: student.photo_url
+          name: student.name, barcode: student.barcode, className: student.class_name_full,
+          time: localTime, photo: student.photo_url
         }, ...prev].slice(0, 10));
-        
         handleSuccessReset(2000);
         return true;
       }
@@ -139,50 +105,32 @@ export default function AttendancePage() {
 
   const handleSuccessReset = (delay) => {
     setTimeout(() => {
-      setBgColor('#ffffff');
+      setBgColor('#f8fafc');
       setStatusMsg("Sedia untuk Imbas");
       isLockedRef.current = false; 
-      if (scannerRef.current && !isManual) {
-        try { scannerRef.current.resume(); } catch (e) {}
-      }
+      if (scannerRef.current && !isManual) { try { scannerRef.current.resume(); } catch (e) {} }
     }, delay);
   };
 
   useEffect(() => {
     if (!isManual) {
-      const scanner = new Html5QrcodeScanner('reader', {
+      const scanner = new Html5QrcodeScanner('reader', { 
         fps: 20, 
-        qrbox: { width: 300, height: 150 }, 
-        aspectRatio: 1.0,
+        qrbox: { width: 250, height: 150 }, 
+        aspectRatio: 1.0 
       });
       scannerRef.current = scanner;
-
-      scanner.render(async (text) => {
-        if (isLockedRef.current) return;
-        await processAttendance(text);
-      }, (err) => {});
-
+      scanner.render(async (text) => { if (isLockedRef.current) return; await processAttendance(text); }, (err) => {});
       return () => { if (scannerRef.current) scannerRef.current.clear().catch(e => {}); };
     }
   }, [isManual]);
 
   const handleManualSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!manualId || manualId.length === 0) {
-      setStatusMsg("⚠️ Masukkan ID murid!");
-      setBgColor('#fff176');
-      return;
-    }
-
-    // Format the ID to ensure it is 4 digits (e.g., 1 -> 0001)
-    const paddedId = manualId.padStart(4, '0');
-    const fullBarcode = `STU-${paddedId}`;
-
+    if (!manualId) return;
+    const fullBarcode = `STU-${manualId.padStart(4, '0')}`;
     const wasSuccessful = await processAttendance(fullBarcode);
-    if (wasSuccessful) {
-      setManualId(''); // Only clear if successfully found/recorded
-    }
+    if (wasSuccessful) setManualId('');
   };
 
   const playSuccessBeep = () => {
@@ -198,89 +146,127 @@ export default function AttendancePage() {
 
   return (
     <main style={{ 
-      padding: '15px', textAlign: 'center', maxWidth: '500px', margin: '0 auto', 
-      fontFamily: 'sans-serif', backgroundColor: bgColor, transition: 'background-color 0.3s ease',
-      minHeight: '100vh', position: 'relative'
+      padding: '24px 16px', textAlign: 'center', maxWidth: '480px', margin: '0 auto', 
+      backgroundColor: bgColor, transition: 'background-color 0.4s ease', minHeight: '100vh'
     }}>
       
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-        <img src="/school_logo.jpg" alt="Logo" style={{ width: '45px', height: 'auto' }} />
-        <div style={{ textAlign: 'center' }}>
-            <h1 style={{ color: '#2e7d32', margin: '0', fontSize: '18px' }}>Hadir SEKEMAS</h1>
-            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#333', marginTop: '2px' }}>{currentTime}</div>
+      {/* HEADER CARD */}
+      <header style={{ 
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+        marginBottom: '24px', padding: '16px', backgroundColor: 'white', 
+        borderRadius: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' 
+      }}>
+        <img src="/school_logo.png" alt="Logo" style={{ width: '48px', height: '48px', borderRadius: '12px', objectFit: 'contain' }} />
+        <div style={{ flex: 1, textAlign: 'center' }}>
+            <h1 style={{ color: '#166534', margin: '0', fontSize: '16px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Hadir SEKEMAS Imbas Pelajar</h1>
+            <div style={{ fontSize: '22px', fontWeight: '700', color: '#334155' }}>{currentTime}</div>
         </div>
-        <button onClick={() => setShowSummary(true)} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #2e7d32', backgroundColor: 'white', color: '#2e7d32', fontWeight: 'bold', fontSize: '12px' }}>
-          📊 Ringkasan
+        <button onClick={() => setShowSummary(true)} style={{ padding: '12px', borderRadius: '14px', border: 'none', backgroundColor: '#f1f5f9', cursor: 'pointer', fontSize: '18px' }}>
+          📊
         </button>
-      </div>
+      </header>
 
+      {/* SUMMARY MODAL */}
       {showSummary && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '15px', padding: '20px', width: '100%', maxWidth: '400px' }}>
-            <div style={{ backgroundColor: '#f0fdf4', padding: '15px', borderRadius: '10px', marginBottom: '15px', border: '1px solid #bcf0da' }}>
-                <div style={{ fontSize: '12px', color: '#666', fontWeight: 'bold' }}>JUMLAH KESELURUHAN</div>
-                <div style={{ fontSize: '36px', color: '#2e7d32', fontWeight: '900' }}>{totalToday}</div>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15, 23, 42, 0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)', padding: '20px' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '28px', padding: '24px', width: '100%', maxWidth: '400px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+            <div style={{ backgroundColor: '#f0fdf4', padding: '24px', borderRadius: '20px', marginBottom: '20px', border: '1px solid #dcfce7' }}>
+                <div style={{ fontSize: '11px', color: '#166534', fontWeight: '800', letterSpacing: '1px', marginBottom: '4px' }}>JUMLAH KEHADIRAN</div>
+                <div style={{ fontSize: '56px', color: '#14532d', fontWeight: '900', lineHeight: '1' }}>{totalToday}</div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', textAlign: 'left', marginBottom: '20px', maxHeight: '300px', overflowY: 'auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', textAlign: 'left', marginBottom: '24px', maxHeight: '320px', overflowY: 'auto' }}>
               {CLASS_LIST.map(cls => (
-                <div key={cls} style={{ borderBottom: '1px solid #eee', padding: '4px', fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{cls}:</span>
-                  <span style={{ fontWeight: 'bold', color: '#2e7d32' }}>{classCounts[cls] || 0}</span>
+                <div key={cls} style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>{cls}</span>
+                  <span style={{ fontWeight: '800', color: '#166534', fontSize: '14px' }}>{classCounts[cls] || 0}</span>
                 </div>
               ))}
             </div>
-            <button onClick={() => setShowSummary(false)} style={{ width: '100%', padding: '14px', backgroundColor: '#2e7d32', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>TUTUP</button>
+            <button onClick={() => setShowSummary(false)} style={{ width: '100%', padding: '18px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '800', fontSize: '16px', cursor: 'pointer', transition: '0.2s' }}>Tutup Kehadiran</button>
           </div>
         </div>
       )}
       
-      <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '15px' }}>
-        <button onClick={() => { setIsManual(!isManual); setManualId(''); }} style={{ padding: '10px 20px', borderRadius: '25px', border: 'none', backgroundColor: '#2196F3', color: 'white', fontWeight: 'bold' }}>
-          {isManual ? "📷 Kamera" : "⌨️ Manual ID"}
-        </button>
+      {/* MODE SELECTOR */}
+      <div style={{ display: 'inline-flex', background: '#e2e8f0', padding: '4px', borderRadius: '16px', marginBottom: '24px' }}>
+        <button onClick={() => setIsManual(false)} style={{ padding: '10px 24px', borderRadius: '12px', border: 'none', backgroundColor: !isManual ? 'white' : 'transparent', color: !isManual ? '#1e293b' : '#64748b', fontWeight: '700', fontSize: '14px', boxShadow: !isManual ? '0 4px 6px -1px rgba(0,0,0,0.1)' : 'none', transition: '0.3s' }}>📷 Pengimbas</button>
+        <button onClick={() => { setIsManual(true); setManualId(''); }} style={{ padding: '10px 24px', borderRadius: '12px', border: 'none', backgroundColor: isManual ? 'white' : 'transparent', color: isManual ? '#1e293b' : '#64748b', fontWeight: '700', fontSize: '14px', boxShadow: isManual ? '0 4px 6px -1px rgba(0,0,0,0.1)' : 'none', transition: '0.3s' }}>⌨️ Manual</button>
       </div>
 
-      {!isManual ? (
-        <div id="reader" style={{ borderRadius: '15px', overflow: 'hidden', border: '2px solid #ccc', backgroundColor: 'white' }}></div>
-      ) : (
-        <form onSubmit={handleManualSubmit} style={{ padding: '20px', border: '2px dashed #2196F3', borderRadius: '15px', backgroundColor: 'white' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '15px' }}>
-            <span style={{ backgroundColor: '#ddd', padding: '12px', fontSize: '20px', fontWeight: 'bold', border: '1px solid #ccc', borderRadius: '8px 0 0 8px' }}>STU-</span>
-            <input 
-              type="text" 
-              inputMode="numeric" 
-              pattern="[0-9]*"
-              placeholder="0000" 
-              value={manualId} 
-              onChange={(e) => { 
-                const val = e.target.value;
-                if (/^\d*$/.test(val) && val.length <= 4) setManualId(val); 
-              }} 
-              style={{ width: '100px', padding: '12px', fontSize: '20px', border: '1px solid #ccc', borderLeft: 'none', borderRadius: '0 8px 8px 0', textAlign: 'center' }} 
-              autoFocus 
-            />
-          </div>
-          <button type="submit" style={{ width: '100%', padding: '14px', backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>Hantar</button>
-        </form>
-      )}
-      
-      <div style={{ margin: '15px 0', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(255,255,255,0.95)', border: '1px solid #ddd', minHeight: '45px' }}>
-        <strong style={{ fontSize: '16px' }}>{statusMsg}</strong>
-      </div>
-
-      <div style={{ textAlign: 'left', marginTop: '10px' }}>
-        <h4 style={{ borderBottom: '2px solid #eee', paddingBottom: '5px', fontSize: '14px', color: '#444' }}>Senarai Terkini</h4>
-        {history.map((item, index) => (
-          <div key={index} style={{ display: 'flex', alignItems: 'center', padding: '10px', borderBottom: '1px solid #eee', backgroundColor: index === 0 ? 'rgba(255,255,255,0.8)' : 'transparent' }}>
-            <img src={item.photo} alt="" style={{ width: '45px', height: '45px', borderRadius: '6px', marginRight: '12px', objectFit: 'cover', border: '1px solid #ddd' }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 'bold', fontSize: '13px' }}>{item.name}</div>
-              <div style={{ fontSize: '11px', color: '#2196F3', fontWeight: 'bold' }}>{item.barcode} • {item.className}</div>
+      {/* SCAN / INPUT AREA */}
+      <div style={{ marginBottom: '24px' }}>
+        {!isManual ? (
+          <div id="reader" style={{ borderRadius: '24px', overflow: 'hidden', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', backgroundColor: 'white' }}></div>
+        ) : (
+          <form onSubmit={handleManualSubmit} style={{ padding: '32px 24px', borderRadius: '24px', backgroundColor: 'white', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', padding: '0 16px', borderRadius: '16px', border: '2px solid #e2e8f0' }}>
+                <span style={{ fontSize: '20px', fontWeight: '800', color: '#94a3b8' }}>STU-</span>
+                <input 
+                  type="text" inputMode="numeric" pattern="[0-9]*" placeholder="0000" value={manualId} 
+                  onChange={(e) => { const val = e.target.value; if (/^\d*$/.test(val) && val.length <= 4) setManualId(val); }} 
+                  style={{ width: '100px', padding: '16px 8px', fontSize: '28px', border: 'none', background: 'transparent', textAlign: 'center', fontWeight: '800', outline: 'none', color: '#1e293b' }} autoFocus 
+                />
+              </div>
             </div>
-            <div style={{ fontSize: '11px', color: '#999' }}>{item.time}</div>
-          </div>
-        ))}
+            <button type="submit" style={{ width: '100%', padding: '18px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '16px', fontWeight: '800', fontSize: '16px', boxShadow: '0 10px 15px -3px rgba(37, 99, 235, 0.3)' }}>Hantar Kehadiran</button>
+          </form>
+        )}
       </div>
+      
+      {/* STATUS BANNER */}
+      <div style={{ 
+        padding: '16px', borderRadius: '16px', backgroundColor: 'white', 
+        border: '1px solid #e2e8f0', marginBottom: '32px'
+      }}>
+        <span style={{ fontSize: '14px', fontWeight: '700', color: '#475569' }}>{statusMsg}</span>
+      </div>
+
+      {/* RECENT RECORDS */}
+      <div style={{ textAlign: 'left' }}>
+        <h4 style={{ fontSize: '12px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '16px', paddingLeft: '8px' }}>Kehadiran Terkini</h4>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {history.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#cbd5e1', fontSize: '14px' }}>No records yet today</div>
+          )}
+          {history.map((item, index) => (
+            <div key={index} style={{ 
+              display: 'flex', alignItems: 'center', padding: '12px', borderRadius: '18px', 
+              backgroundColor: 'white', border: '1px solid #f1f5f9',
+              boxShadow: index === 0 ? '0 10px 15px -3px rgba(0,0,0,0.05)' : 'none',
+              animation: index === 0 ? 'popIn 0.4s ease-out' : 'none'
+            }}>
+              <img src={item.photo} alt="" style={{ width: '52px', height: '52px', borderRadius: '12px', marginRight: '16px', objectFit: 'cover', background: '#f1f5f9' }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: '700', fontSize: '14px', color: '#1e293b', marginBottom: '2px' }}>{item.name}</div>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>{item.barcode} • <span style={{ color: '#2563eb', fontWeight: '700' }}>{item.className}</span></div>
+              </div>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', backgroundColor: '#f8fafc', padding: '4px 8px', borderRadius: '6px' }}>{item.time}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <style jsx global>{`
+        @keyframes popIn {
+          0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        #reader { border: none !important; }
+        #reader__scan_region { background: white !important; }
+        #reader__dashboard_section_csr button {
+          background-color: #2563eb !important;
+          color: white !important;
+          border: none !important;
+          padding: 10px 20px !important;
+          border-radius: 12px !important;
+          font-weight: 700 !important;
+          font-size: 14px !important;
+          text-transform: uppercase !important;
+          cursor: pointer !important;
+        }
+        #reader video { border-radius: 24px !important; }
+      `}</style>
     </main>
   );
 }
