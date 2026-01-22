@@ -29,7 +29,7 @@ export default function AttendancePage() {
   const [currentTime, setCurrentTime] = useState("");
   
   const scannerRef = useRef(null);
-  const isLockedRef = useRef(false); // Global lock for SUCCESS cooldown only
+  const isLockedRef = useRef(false);
 
   // Live Clock Logic
   useEffect(() => {
@@ -63,7 +63,6 @@ export default function AttendancePage() {
   };
 
   const processAttendance = async (barcodeText) => {
-    // Only lock here if we want to stop the world (Success or Manual)
     try {
       const { data: student, error: fetchError } = await supabase
         .from('students')
@@ -71,12 +70,10 @@ export default function AttendancePage() {
         .eq('barcode', barcodeText)
         .single();
 
-      // IF NOT FOUND: Just show a warning and let the camera keep rolling
       if (fetchError || !student) {
-        setBgColor('#fff9c4'); // Subtle yellow (warning)
-        setStatusMsg("❌ Tidak dijumpai. Mantapkan posisi kad...");
+        setBgColor('#fff9c4'); 
+        setStatusMsg("❌ Barkod tidak dijumpai...");
         
-        // Short reset of the message without stopping the scanner
         setTimeout(() => {
             if (!isLockedRef.current) {
                 setBgColor('#ffffff');
@@ -86,9 +83,10 @@ export default function AttendancePage() {
         return false;
       }
 
-      // IF FOUND: Now we trigger the Success Cooldown
       isLockedRef.current = true;
-      scannerRef.current?.pause(true); 
+      if (scannerRef.current) {
+        try { scannerRef.current.pause(true); } catch (e) {}
+      }
 
       const now = new Date();
       const localDate = now.toLocaleDateString('en-CA'); 
@@ -113,7 +111,7 @@ export default function AttendancePage() {
         playSuccessBeep();
         if (navigator.vibrate) navigator.vibrate(100); 
         
-        setBgColor('#81c784'); // Success Green
+        setBgColor('#81c784'); 
         setStatusMsg(`✅ ${student.name}`);
         
         setClassCounts(prev => ({
@@ -129,7 +127,7 @@ export default function AttendancePage() {
           photo: student.photo_url
         }, ...prev].slice(0, 10));
         
-        handleSuccessReset(2000); // 2 second pause only for success
+        handleSuccessReset(2000);
         return true;
       }
     } catch (err) {
@@ -160,10 +158,7 @@ export default function AttendancePage() {
       scannerRef.current = scanner;
 
       scanner.render(async (text) => {
-        // If we are in the 2s SUCCESS cooldown, ignore everything
         if (isLockedRef.current) return;
-
-        // Otherwise, process. If it fails, it won't pause the scanner.
         await processAttendance(text);
       }, (err) => {});
 
@@ -173,13 +168,21 @@ export default function AttendancePage() {
 
   const handleManualSubmit = async (e) => {
     e.preventDefault();
-    if (manualId.length !== 4) {
-      setStatusMsg("⚠️ Masukkan tepat 4 digit!");
+    
+    if (!manualId || manualId.length === 0) {
+      setStatusMsg("⚠️ Masukkan ID murid!");
       setBgColor('#fff176');
       return;
     }
-    await processAttendance(`STU-${manualId}`);
-    setManualId('');
+
+    // Format the ID to ensure it is 4 digits (e.g., 1 -> 0001)
+    const paddedId = manualId.padStart(4, '0');
+    const fullBarcode = `STU-${paddedId}`;
+
+    const wasSuccessful = await processAttendance(fullBarcode);
+    if (wasSuccessful) {
+      setManualId(''); // Only clear if successfully found/recorded
+    }
   };
 
   const playSuccessBeep = () => {
@@ -243,7 +246,19 @@ export default function AttendancePage() {
         <form onSubmit={handleManualSubmit} style={{ padding: '20px', border: '2px dashed #2196F3', borderRadius: '15px', backgroundColor: 'white' }}>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '15px' }}>
             <span style={{ backgroundColor: '#ddd', padding: '12px', fontSize: '20px', fontWeight: 'bold', border: '1px solid #ccc', borderRadius: '8px 0 0 8px' }}>STU-</span>
-            <input type="number" inputMode="numeric" placeholder="0000" value={manualId} onChange={(e) => { if (e.target.value.length <= 4) setManualId(e.target.value); }} style={{ width: '100px', padding: '12px', fontSize: '20px', border: '1px solid #ccc', borderLeft: 'none', borderRadius: '0 8px 8px 0', textAlign: 'center' }} autoFocus />
+            <input 
+              type="text" 
+              inputMode="numeric" 
+              pattern="[0-9]*"
+              placeholder="0000" 
+              value={manualId} 
+              onChange={(e) => { 
+                const val = e.target.value;
+                if (/^\d*$/.test(val) && val.length <= 4) setManualId(val); 
+              }} 
+              style={{ width: '100px', padding: '12px', fontSize: '20px', border: '1px solid #ccc', borderLeft: 'none', borderRadius: '0 8px 8px 0', textAlign: 'center' }} 
+              autoFocus 
+            />
           </div>
           <button type="submit" style={{ width: '100%', padding: '14px', backgroundColor: '#2196F3', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}>Hantar</button>
         </form>
